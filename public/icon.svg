@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="5" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  <!-- Background Grid -->
+  <rect width="512" height="512" fill="#ffffff"/>
+  <path d="M0 32h512M0 64h512M0 96h512M0 128h512M0 160h512M0 192h512M0 224h512M0 256h512M0 288h512M0 320h512M0 352h512M0 384h512M0 416h512M0 448h512M0 480h512M32 0v512M64 0v512M96 0v512M128 0v512M160 0v512M192 0v512M224 0v512M256 0v512M288 0v512M320 0v512M352 0v512M384 0v512M416 0v512M448 0v512M480 0v512" stroke="#f3f4f6" stroke-width="1"/>
+  
+  <!-- Colorful Circles (Agar.io style) -->
+  <circle cx="80" cy="100" r="60" fill="#ff3333" filter="url(#glow)"/> <!-- Red -->
+  <circle cx="420" cy="120" r="80" fill="#33ff33" filter="url(#glow)"/> <!-- Green -->
+  <circle cx="120" cy="420" r="70" fill="#3333ff" filter="url(#glow)"/> <!-- Blue -->
+  <circle cx="440" cy="440" r="50" fill="#ff9900" filter="url(#glow)"/> <!-- Orange -->
+  <circle cx="256" cy="256" r="100" fill="#9900ff" fill-opacity="0.9" filter="url(#glow)"/> <!-- Purple center -->
+  <circle cx="350" cy="350" r="40" fill="#ff00ff" filter="url(#glow)"/> <!-- Pink -->
+  <circle cx="150" cy="150" r="30" fill="#00ffff" filter="url(#glow)"/> <!-- Cyan -->
+  
+  <!-- Text -->
+  <text x="256" y="290" font-family="Arial, sans-serif" font-size="110" font-weight="900" fill="#ffffff" text-anchor="middle">Ai</text>
+</svg>

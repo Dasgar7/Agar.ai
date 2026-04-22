@@ -1,0 +1,5 @@
+{
+  "name": "Agar.ai",
+  "description": "The ultimate professional assistant for the Agar.io community.",
+  "requestFramePermissions": ["microphone"]
+}
