@@ -16,12 +16,6 @@ import {
   toFirestoreData
 } from '../firebase';
 
-export interface QAPair {
-  id: string;
-  question: string;
-  answer: string;
-}
-
 interface ConnectedAccounts {
   agarioUid?: string;
   youtube?: string;
@@ -36,14 +30,10 @@ interface FirebaseContextType {
   loading: boolean;
   isLoggingIn: boolean;
   connectedAccounts: ConnectedAccounts | null;
-  customKnowledge: string;
-  qaKnowledge: QAPair[];
   login: () => Promise<void>;
   logout: () => Promise<void>;
   updateConnectedAccounts: (accounts: ConnectedAccounts) => Promise<void>;
   verifyAccount: (uid: string) => Promise<boolean>;
-  updateCustomKnowledge: (knowledge: string) => Promise<void>;
-  updateQAKnowledge: (qa: QAPair[]) => Promise<void>;
 }
 
 const FirebaseContext = createContext<FirebaseContextType | undefined>(undefined);
@@ -52,8 +42,6 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
   const [connectedAccounts, setConnectedAccounts] = useState<ConnectedAccounts | null>(null);
-  const [customKnowledge, setCustomKnowledge] = useState("");
-  const [qaKnowledge, setQaKnowledge] = useState<QAPair[]>([]);
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -72,8 +60,6 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
             }));
           } else {
             setConnectedAccounts(userDoc.data().connectedAccounts || null);
-            setCustomKnowledge(userDoc.data().customKnowledge || "");
-            setQaKnowledge(userDoc.data().qaKnowledge || []);
           }
         } catch (error) {
           handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
@@ -82,8 +68,6 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
       } else {
         setUser(null);
         setConnectedAccounts(null);
-        setCustomKnowledge("");
-        setQaKnowledge([]);
       }
       setLoading(false);
     });
@@ -145,46 +129,16 @@ export const FirebaseProvider: React.FC<{ children: ReactNode }> = ({ children }
     return success;
   };
 
-  const updateCustomKnowledge = async (knowledge: string) => {
-    if (!user) return;
-    const userRef = doc(db, 'users', user.uid);
-    try {
-      await setDoc(userRef, toFirestoreData({
-        customKnowledge: knowledge
-      }), { merge: true });
-      setCustomKnowledge(knowledge);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
-    }
-  };
-
-  const updateQAKnowledge = async (qa: QAPair[]) => {
-    if (!user) return;
-    const userRef = doc(db, 'users', user.uid);
-    try {
-      await setDoc(userRef, toFirestoreData({
-        qaKnowledge: qa
-      }), { merge: true });
-      setQaKnowledge(qa);
-    } catch (error) {
-      handleFirestoreError(error, OperationType.WRITE, `users/${user.uid}`);
-    }
-  };
-
   return (
     <FirebaseContext.Provider value={{ 
       user, 
       loading, 
       isLoggingIn, 
       connectedAccounts, 
-      customKnowledge,
-      qaKnowledge,
       login, 
       logout,
       updateConnectedAccounts,
-      verifyAccount,
-      updateCustomKnowledge,
-      updateQAKnowledge
+      verifyAccount
     }}>
       {children}
     </FirebaseContext.Provider>

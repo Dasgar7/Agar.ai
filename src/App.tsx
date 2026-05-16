@@ -15,7 +15,7 @@ import {
 import ReactMarkdown from "react-markdown";
 import { Message, sendMessage, generateImage, generateSpeech } from "./services/gemini";
 import { speechService } from "./services/speechService";
-import { useFirebase, QAPair } from "./contexts/FirebaseContext";
+import { useFirebase } from "./contexts/FirebaseContext";
 import { 
   db, 
   collection, 
@@ -137,7 +137,7 @@ const useLongPress = (onLongPress: (e: any) => void, ms = 500) => {
 };
 
 export default function App() {
-  const { user, loading, isLoggingIn, login, logout, connectedAccounts, updateConnectedAccounts, verifyAccount, customKnowledge: initialCustomKnowledge, updateCustomKnowledge, qaKnowledge, updateQAKnowledge } = useFirebase();
+  const { user, loading, isLoggingIn, login, logout, connectedAccounts, updateConnectedAccounts, verifyAccount } = useFirebase();
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [isLoading, setIsLoading] = useState(false);
@@ -168,13 +168,6 @@ export default function App() {
   const [isPublishedView, setIsPublishedView] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [isConfirmModalOpen, setIsConfirmModalOpen] = useState(false);
-  const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
-  const [adminTab, setAdminTab] = useState<'rules' | 'qa'>('rules');
-  const [customKnowledge, setCustomKnowledge] = useState(initialCustomKnowledge || "");
-  const [localQaKnowledge, setLocalQaKnowledge] = useState<QAPair[]>([]);
-  const [newQ, setNewQ] = useState("");
-  const [newA, setNewA] = useState("");
-  const [isSavingKnowledge, setIsSavingKnowledge] = useState(false);
   const [confirmAction, setConfirmAction] = useState<() => void>(() => {});
   const [confirmMessage, setConfirmMessage] = useState("");
 
@@ -199,25 +192,6 @@ export default function App() {
   const scrollRef = useRef<HTMLDivElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    setCustomKnowledge(initialCustomKnowledge || "");
-  }, [initialCustomKnowledge]);
-
-  useEffect(() => {
-    setLocalQaKnowledge(qaKnowledge || []);
-  }, [qaKnowledge]);
-
-  const handleAddQA = () => {
-    if (!newQ.trim() || !newA.trim()) return;
-    setLocalQaKnowledge([...localQaKnowledge, { id: Date.now().toString(), question: newQ, answer: newA }]);
-    setNewQ("");
-    setNewA("");
-  };
-
-  const handleRemoveQA = (id: string) => {
-    setLocalQaKnowledge(localQaKnowledge.filter(qa => qa.id !== id));
-  };
 
   useEffect(() => {
     if (scrollRef.current) {
@@ -311,7 +285,7 @@ export default function App() {
         setMessages((prev) => 
           prev.map(m => m.id === currentBotMessageId ? { ...m, text: streamedText } : m)
         );
-      }, selectedModel, connectedAccounts, customKnowledge, qaKnowledge);
+      }, selectedModel, connectedAccounts);
       
       const botText = response.text || "";
       const botMessage: Message = {
@@ -337,21 +311,26 @@ export default function App() {
     } catch (error: any) {
       console.error("Error sending message:", error);
       
-      // Silent retry or vague themed message
+      const isQuotaError = error.message?.toLowerCase().includes("quota") || error.message?.toLowerCase().includes("billing-enabled");
+
       const errorMessage: Message = {
         role: "model",
-        text: "Agar.ai is currently evolving and absorbing new data. One moment while I optimize my neural cells...",
+        text: isQuotaError 
+          ? error.message 
+          : "Agar.ai is currently evolving and absorbing new data. One moment while I optimize my neural cells...",
         id: `error-${Date.now()}`,
         timestamp: Date.now(),
         type: "text"
       };
       setMessages((prev) => [...prev, errorMessage]);
       
-      // Attempt a silent recovery after a delay
-      setTimeout(() => {
-        setMessages(prev => prev.filter(m => m.id !== errorMessage.id));
-        handleSend(textToSend, isVoiceMessage, audioUrl);
-      }, 5000);
+      if (!isQuotaError) {
+        // Attempt a silent recovery after a delay for transient errors
+        setTimeout(() => {
+          setMessages(prev => prev.filter(m => m.id !== errorMessage.id));
+          handleSend(textToSend, isVoiceMessage, audioUrl);
+        }, 5000);
+      }
     } finally {
       setIsLoading(false);
     }
@@ -377,6 +356,10 @@ export default function App() {
         audioRef.current.onended = () => setPlayingAudioId(null);
         setPlayingAudioId(msgId);
         await audioRef.current.play();
+      } else {
+        // Fallback to browser voice if server TTS fails
+        speechService.speak(text, () => setPlayingAudioId(null));
+        setPlayingAudioId(msgId);
       }
     } catch (error) {
       console.error("TTS Error:", error);
@@ -698,139 +681,7 @@ export default function App() {
   }
 
   return (
-    <div className="flex flex-col h-screen max-w-4xl mx-auto bg-white shadow-2xl overflow-hidden sm:my-8 sm:h-[calc(100vh-4rem)] sm:rounded-3xl border border-zinc-200 relative" onClick={closeContextMenu}>
-      {/* Admin Panel Modal */}
-      <AnimatePresence>
-        {isAdminPanelOpen && (
-          <div className="fixed inset-0 z-[200] flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm">
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.9, y: 20 }}
-              animate={{ opacity: 1, scale: 1, y: 0 }}
-              exit={{ opacity: 0, scale: 0.9, y: 20 }}
-              className="bg-white rounded-3xl p-8 max-w-2xl w-full shadow-2xl border border-zinc-100 flex flex-col max-h-[90vh]"
-            >
-              <div className="flex items-center justify-between mb-6 shrink-0">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-zinc-900 rounded-xl flex items-center justify-center">
-                    <Settings className="w-5 h-5 text-white" />
-                  </div>
-                  <div>
-                    <h3 className="text-2xl font-black text-zinc-900 tracking-tight">Admin Panel</h3>
-                    <p className="text-xs text-zinc-500 font-medium">Manage AI Knowledge Base</p>
-                  </div>
-                </div>
-                <button 
-                  onClick={() => setIsAdminPanelOpen(false)}
-                  className="p-2 hover:bg-zinc-100 rounded-xl transition-colors"
-                >
-                  <X className="w-6 h-6 text-zinc-400" />
-                </button>
-              </div>
-
-              <div className="flex-1 overflow-y-auto min-h-0 space-y-6 pr-2">
-                <div className="flex gap-2 mb-2 p-1 bg-zinc-100 rounded-xl">
-                  <button
-                    onClick={() => setAdminTab('rules')}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${adminTab === 'rules' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
-                  >
-                    General Rules
-                  </button>
-                  <button
-                    onClick={() => setAdminTab('qa')}
-                    className={`flex-1 py-2 text-xs font-bold rounded-lg transition-all ${adminTab === 'qa' ? 'bg-white text-zinc-900 shadow-sm' : 'text-zinc-500 hover:text-zinc-700'}`}
-                  >
-                    Q&A Database
-                  </button>
-                </div>
-
-                {adminTab === 'rules' ? (
-                  <div className="space-y-2">
-                    <label className="text-[10px] uppercase tracking-widest font-bold text-zinc-400 ml-1">Custom Knowledge Base</label>
-                    <textarea 
-                      value={customKnowledge}
-                      onChange={(e) => setCustomKnowledge(e.target.value)}
-                      placeholder="Enter custom instructions, rules, or knowledge for Agar.ai here..."
-                      className="w-full h-64 p-4 bg-zinc-50 border border-zinc-100 rounded-2xl focus:ring-2 focus:ring-zinc-900 transition-all text-sm font-medium resize-none font-mono"
-                    />
-                    <p className="text-[10px] text-zinc-400 ml-1 italic">This text will be appended to the AI's system instructions.</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    <div className="space-y-3 max-h-64 overflow-y-auto pr-2">
-                      {localQaKnowledge.map((qa) => (
-                        <div key={qa.id} className="p-3 bg-zinc-50 border border-zinc-100 rounded-xl relative group">
-                          <button
-                            onClick={() => handleRemoveQA(qa.id)}
-                            className="absolute top-2 right-2 p-1.5 bg-white text-red-500 rounded-lg opacity-0 group-hover:opacity-100 transition-opacity shadow-sm border border-zinc-100 hover:bg-red-50"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                          <p className="text-xs font-bold text-zinc-900 mb-1 pr-8">Q: {qa.question}</p>
-                          <p className="text-xs text-zinc-600">A: {qa.answer}</p>
-                        </div>
-                      ))}
-                      {localQaKnowledge.length === 0 && (
-                        <div className="text-center py-8 text-zinc-400 text-sm font-medium">No Q&A pairs added yet.</div>
-                      )}
-                    </div>
-
-                    <div className="p-4 bg-zinc-100 rounded-2xl space-y-3 border border-zinc-200">
-                      <h4 className="text-xs font-bold text-zinc-900 uppercase tracking-widest">Add New Q&A</h4>
-                      <input
-                        type="text"
-                        placeholder="Question"
-                        value={newQ}
-                        onChange={(e) => setNewQ(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-xl text-sm focus:ring-2 focus:ring-zinc-900 transition-all"
-                      />
-                      <textarea
-                        placeholder="Answer"
-                        value={newA}
-                        onChange={(e) => setNewA(e.target.value)}
-                        className="w-full px-3 py-2 bg-white border border-zinc-200 rounded-xl text-sm focus:ring-2 focus:ring-zinc-900 transition-all resize-none h-20"
-                      />
-                      <button
-                        onClick={handleAddQA}
-                        disabled={!newQ.trim() || !newA.trim()}
-                        className="w-full py-2 bg-zinc-900 text-white rounded-xl text-xs font-bold hover:bg-zinc-800 transition-all disabled:opacity-50"
-                      >
-                        Add to Database
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-
-              <div className="mt-6 pt-6 border-t border-zinc-100 shrink-0 flex gap-3">
-                <button 
-                  onClick={() => setIsAdminPanelOpen(false)}
-                  className="flex-1 py-4 bg-zinc-100 text-zinc-600 rounded-2xl font-bold hover:bg-zinc-200 transition-all active:scale-95"
-                >
-                  Cancel
-                </button>
-                <button 
-                  onClick={async () => {
-                    setIsSavingKnowledge(true);
-                    await updateCustomKnowledge(customKnowledge);
-                    await updateQAKnowledge(localQaKnowledge);
-                    setIsSavingKnowledge(false);
-                    setIsAdminPanelOpen(false);
-                  }}
-                  disabled={isSavingKnowledge}
-                  className="flex-1 py-4 bg-zinc-900 text-white rounded-2xl font-bold hover:bg-zinc-800 transition-all shadow-lg active:scale-95 flex items-center justify-center gap-2"
-                >
-                  {isSavingKnowledge ? (
-                    <><Loader2 className="w-5 h-5 animate-spin" /> Saving...</>
-                  ) : (
-                    <><Check className="w-5 h-5" /> Save Knowledge</>
-                  )}
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
-
+    <div className="flex flex-col h-screen w-full bg-white relative" onClick={closeContextMenu}>
       {/* Connect Accounts Modal */}
       <AnimatePresence>
         {isConnectModalOpen && (
@@ -1131,24 +982,6 @@ export default function App() {
                 </div>
               </section>
 
-              <section>
-                <h3 className="text-xs font-bold text-zinc-400 uppercase tracking-widest mb-4">Advanced</h3>
-                <button
-                  onClick={() => setIsAdminPanelOpen(true)}
-                  className="w-full flex items-center justify-between p-4 bg-zinc-50 rounded-2xl border border-zinc-100 hover:bg-zinc-100 transition-colors"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-xl bg-zinc-200 text-zinc-600">
-                      <Settings className="w-5 h-5" />
-                    </div>
-                    <div className="text-left">
-                      <p className="font-medium text-zinc-800">Admin Panel</p>
-                      <p className="text-xs text-zinc-500">Manage AI knowledge and settings</p>
-                    </div>
-                  </div>
-                  <ChevronRight className="w-5 h-5 text-zinc-400" />
-                </button>
-              </section>
             </div>
             
             <footer className="p-6 text-center border-t border-zinc-100">
@@ -1202,8 +1035,8 @@ export default function App() {
       </div>
 
       {/* Input Area */}
-      <footer className="p-4 bg-white border-t border-zinc-100">
-        <div className="max-w-3xl mx-auto space-y-4">
+      <footer className="p-4 bg-white border-t border-zinc-100 flex-shrink-0">
+        <div className="max-w-4xl mx-auto space-y-4">
           {selectedFile && (
             <div className="flex items-center gap-3 p-2 bg-zinc-50 rounded-xl border border-zinc-100 animate-in fade-in slide-in-from-bottom-2">
               <div className="w-10 h-10 bg-zinc-900 rounded-lg flex items-center justify-center text-white">
@@ -1366,7 +1199,7 @@ function MessageBubble({ msg, onLongPress, isPlaying, onPlay, onFullScreen, onRe
       onContextMenu={(e) => { e.preventDefault(); onLongPress(e); }}
       {...longPressProps}
     >
-      <div className={`flex gap-4 ${isUser ? "max-w-[85%] sm:max-w-[75%] flex-row-reverse" : "w-full flex-col"}`}>
+      <div className={`flex gap-4 ${isUser ? "max-w-[85%] lg:max-w-[60%] flex-row-reverse" : "w-full max-w-4xl mx-auto flex-col"}`}>
         {/* Header for AI or Icon for User */}
         {!isUser ? (
           <div className="flex items-center gap-3">
